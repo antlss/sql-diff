@@ -61,6 +61,14 @@ export function resolveExpressionAliases(expr, aliasMap) {
 function resolveExpressionAliasesInPlace(expr, aliasMap, implicitTable = null) {
   if (!expr) return expr;
 
+  // Convert double_quote_string to column_ref (assume standard SQL identifier behavior)
+  if (expr.type === 'double_quote_string') {
+    expr.type = 'column_ref';
+    expr.column = expr.value;
+    expr.table = null;
+    delete expr.value;
+  }
+
   // Handle column reference: { type: 'column_ref', table: 'alias', column: 'name' }
   if (expr.type === 'column_ref') {
     // Case 1: Has table prefix -> resolve alias
@@ -97,7 +105,8 @@ function resolveExpressionAliasesInPlace(expr, aliasMap, implicitTable = null) {
         }
       }
     }
-    // Handle CASE expression nested in args
+    // Handle CASE expression nested in args or inside aggr_func
+    // aggr_func might have args as object { expr: ... } or just args: [ ... ]
     if (expr.args.expr) {
       resolveExpressionAliasesInPlace(expr.args.expr, aliasMap, implicitTable);
     }

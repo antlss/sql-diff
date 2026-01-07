@@ -78,6 +78,20 @@ export function normalizeQuery(sql, options = {}) {
             resolveAstAliases(normalizedAst, aliasMap);
         }
 
+        // Implicit Step: Standardize SELECT Aliases
+        // Ensure every column has an alias (as) to ensure "col" and "col AS col" normalize identically
+        if (normalizedAst.columns && Array.isArray(normalizedAst.columns)) {
+            normalizedAst.columns.forEach(col => {
+                if (!col.as && col.expr && col.expr.type === 'column_ref') {
+                    col.as = col.expr.column;
+                }
+                // Handle double_quote_string that were converted or not
+                if (!col.as && col.expr && col.expr.type === 'double_quote_string') {
+                    col.as = col.expr.value;
+                }
+            });
+        }
+
         // Step 2: Sort SELECT columns
         if (sortColumns && normalizedAst.columns) {
             normalizedAst.columns = sortSelectColumns(normalizedAst.columns);
