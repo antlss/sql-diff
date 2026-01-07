@@ -2,7 +2,7 @@
 
 A web-based tool for comparing SQL queries by their **semantic meaning**, not just syntax. It normalizes queries by resolving aliases, sorting conditions, and formatting output so you can easily identify if two queries are logically equivalent.
 
-![SQL Diff Screenshot](https://raw.githubusercontent.com/YOUR_USERNAME/sql-diff/main/docs/screenshot.png)
+![SQL Diff Screenshot](./screenshot.png)
 
 ## ✨ Features
 

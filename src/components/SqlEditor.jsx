@@ -1,10 +1,13 @@
 /**
- * SQL Editor Component with Syntax Highlighting
- * Uses overlay approach: transparent textarea over highlighted pre
+ * SQL Editor Component with Syntax Highlighting & Auto-resize
+ * Uses scrollHeight measurement for dynamic height
  */
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, useState, useLayoutEffect } from 'react';
 import Prism from 'prismjs';
 import 'prismjs/components/prism-sql';
+
+const MIN_HEIGHT = 120;
+const MAX_HEIGHT = 1200;
 
 export function SqlEditor({
     value,
@@ -19,6 +22,23 @@ export function SqlEditor({
     const textareaRef = useRef(null);
     const highlightRef = useRef(null);
     const containerRef = useRef(null);
+    const [height, setHeight] = useState(MIN_HEIGHT);
+
+    // Auto-resize based on content
+    useLayoutEffect(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        // Reset to min height to get accurate scrollHeight
+        textarea.style.height = `${MIN_HEIGHT}px`;
+
+        // Calculate new height based on scrollHeight
+        const scrollHeight = textarea.scrollHeight;
+        const newHeight = Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, scrollHeight));
+
+        setHeight(newHeight);
+        textarea.style.height = `${newHeight}px`;
+    }, [value, fontSize]);
 
     // Sync scroll between textarea and highlight layer
     const handleScroll = useCallback(() => {
@@ -35,7 +55,6 @@ export function SqlEditor({
         try {
             const highlighted = Prism.highlight(value, Prism.languages.sql, 'sql');
 
-            // If there's an error line, add error highlighting
             if (errorLine !== null && errorLine > 0) {
                 const lines = highlighted.split('\n');
                 const errorIdx = errorLine - 1;
@@ -51,19 +70,20 @@ export function SqlEditor({
         }
     }, [value, errorLine]);
 
-    const style = { fontSize: `${fontSize}px` };
+    const textStyle = { fontSize: `${fontSize}px` };
 
     return (
         <div
             ref={containerRef}
             className={`sql-editor-container ${error ? 'sql-editor-container--error' : ''}`}
+            style={{ height: `${height}px` }}
         >
             {/* Highlight layer (behind) */}
             <pre
                 ref={highlightRef}
                 className="sql-editor-highlight"
                 aria-hidden="true"
-                style={style}
+                style={textStyle}
             >
                 <code
                     className="language-sql"
@@ -85,7 +105,7 @@ export function SqlEditor({
                 autoComplete="off"
                 autoCorrect="off"
                 autoCapitalize="off"
-                style={style}
+                style={{ ...textStyle, height: `${height}px` }}
             />
         </div>
     );
@@ -93,13 +113,10 @@ export function SqlEditor({
 
 /**
  * Parse error message to extract line number if possible
- * @param {string} errorMsg - Error message from parser
- * @returns {{ line: number|null, column: number|null, message: string }}
  */
 export function parseErrorPosition(errorMsg) {
     if (!errorMsg) return { line: null, column: null, message: '' };
 
-    // Try to match patterns like "line 5" or "at position 123"
     const lineMatch = errorMsg.match(/line\s+(\d+)/i);
     const colMatch = errorMsg.match(/column\s+(\d+)/i);
     const posMatch = errorMsg.match(/position\s+(\d+)/i);

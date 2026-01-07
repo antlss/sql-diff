@@ -135,6 +135,7 @@ body {
   padding: 60px 16px 16px;
   background: var(--bg-primary);
   transition: background 0.3s ease;
+  overflow-y: auto;
 }
 
 /* Floating Toolbar */
@@ -215,11 +216,11 @@ body {
 
 /* Editor Container */
 .editor-container {
-  flex: 1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
-  min-height: 0;
+  min-height: 120px;
+  /* No max-height - allow content to determine size */
 }
 
 @media (max-width: 800px) {
@@ -234,8 +235,8 @@ body {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  overflow: hidden;
-  min-height: 200px;
+  overflow: visible;
+  min-height: 120px;
   transition: border-color 0.2s ease;
 }
 
@@ -261,8 +262,7 @@ body {
 
 .editor-panel .sql-editor-container {
   flex: 1;
-  min-height: 150px;
-  max-height: none;
+  min-height: 120px;
 }
 
 .inline-error {
@@ -408,8 +408,8 @@ body {
 }
 
 .output-panel .sql-highlight {
-  padding: 10px;
-  max-height: 200px;
+  padding: 12px 14px;
+  /* No max-height - auto-resize based on content */
 }
 
 /* Header */
@@ -587,9 +587,9 @@ body {
 .sql-editor-container {
   position: relative;
   width: 100%;
-  min-height: 220px;
-  max-height: 380px;
-  overflow: auto;
+  min-height: 120px;
+  overflow: hidden;
+  /* height is set dynamically via inline style */
 }
 
 .sql-editor-container--error {
@@ -625,15 +625,14 @@ body {
 /* Textarea layer (in front, transparent text) */
 .sql-editor-textarea {
   position: relative;
+  display: block;
   width: 100%;
-  min-height: 220px;
-  max-height: 380px;
   padding: 1rem 1.125rem;
   margin: 0;
   background: transparent;
   border: none;
   outline: none;
-  resize: vertical;
+  resize: none;
   font-family: var(--font-mono);
   font-size: 0.8125rem;
   line-height: 1.75;
@@ -641,7 +640,8 @@ body {
   caret-color: var(--text-primary);
   tab-size: 2;
   -webkit-text-fill-color: transparent;
-  overflow: auto;
+  overflow: hidden;
+  /* height is set dynamically via inline style */
 }
 
 .sql-editor-textarea::placeholder {
@@ -1049,8 +1049,7 @@ body {
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1.85;
-  max-height: 350px;
-  overflow-y: auto;
+  /* No height constraints - auto-resize based on content */
 }
 
 .sql-highlight code {
