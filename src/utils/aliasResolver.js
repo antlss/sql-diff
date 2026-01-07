@@ -58,41 +58,48 @@ export function resolveExpressionAliases(expr, aliasMap) {
   return resolveExpressionAliasesInPlace(result, aliasMap);
 }
 
-function resolveExpressionAliasesInPlace(expr, aliasMap) {
+function resolveExpressionAliasesInPlace(expr, aliasMap, implicitTable = null) {
   if (!expr) return expr;
 
   // Handle column reference: { type: 'column_ref', table: 'alias', column: 'name' }
-  if (expr.type === 'column_ref' && expr.table) {
-    const tableLower = normalizeTableName(expr.table);
-    if (aliasMap.has(tableLower)) {
-      expr.table = aliasMap.get(tableLower);
+  if (expr.type === 'column_ref') {
+    // Case 1: Has table prefix -> resolve alias
+    if (expr.table) {
+      const tableLower = normalizeTableName(expr.table);
+      if (aliasMap.has(tableLower)) {
+        expr.table = aliasMap.get(tableLower);
+      }
+    }
+    // Case 2: No table prefix but implicit table available -> inject it
+    else if (implicitTable) {
+      expr.table = implicitTable;
     }
   }
 
   // Handle binary expressions (AND, OR, =, <, >, etc.)
   if (expr.left) {
-    resolveExpressionAliasesInPlace(expr.left, aliasMap);
+    resolveExpressionAliasesInPlace(expr.left, aliasMap, implicitTable);
   }
   if (expr.right) {
-    resolveExpressionAliasesInPlace(expr.right, aliasMap);
+    resolveExpressionAliasesInPlace(expr.right, aliasMap, implicitTable);
   }
 
   // Handle function arguments
   if (expr.args) {
     if (Array.isArray(expr.args)) {
       for (const arg of expr.args) {
-        resolveExpressionAliasesInPlace(arg, aliasMap);
+        resolveExpressionAliasesInPlace(arg, aliasMap, implicitTable);
       }
     } else if (expr.args.value) {
       if (Array.isArray(expr.args.value)) {
         for (const arg of expr.args.value) {
-          resolveExpressionAliasesInPlace(arg, aliasMap);
+          resolveExpressionAliasesInPlace(arg, aliasMap, implicitTable);
         }
       }
     }
     // Handle CASE expression nested in args
     if (expr.args.expr) {
-      resolveExpressionAliasesInPlace(expr.args.expr, aliasMap);
+      resolveExpressionAliasesInPlace(expr.args.expr, aliasMap, implicitTable);
     }
   }
 
@@ -102,10 +109,10 @@ function resolveExpressionAliasesInPlace(expr, aliasMap) {
     if (expr.args) {
       for (const arg of expr.args) {
         if (arg.cond) {
-          resolveExpressionAliasesInPlace(arg.cond, aliasMap);
+          resolveExpressionAliasesInPlace(arg.cond, aliasMap, implicitTable);
         }
         if (arg.result) {
-          resolveExpressionAliasesInPlace(arg.result, aliasMap);
+          resolveExpressionAliasesInPlace(arg.result, aliasMap, implicitTable);
         }
       }
     }
@@ -114,7 +121,7 @@ function resolveExpressionAliasesInPlace(expr, aliasMap) {
   // Handle IN expressions with subqueries or lists
   if (expr.value && Array.isArray(expr.value)) {
     for (const val of expr.value) {
-      resolveExpressionAliasesInPlace(val, aliasMap);
+      resolveExpressionAliasesInPlace(val, aliasMap, implicitTable);
     }
   }
 
@@ -149,12 +156,58 @@ function normalizeTableEntry(table) {
 export function resolveAstAliases(ast, aliasMap) {
   if (!ast) return;
 
+  // Single Table Inference:
+  // If there is exactly one table in FROM, we can assume implicit aliasing
+  let implicitTable = null;
+  if (ast.from && ast.from.length === 1 && ast.from[0].table) {
+    implicitTable = normalizeTableName(ast.from[0].table);
+  }
+
+  // Helper to inject implicit table if explicit table is missing (null)
+  const injectImplicitAlias = (expr) => {
+    if (!implicitTable) return;
+    if (expr.type === 'column_ref' && !expr.table) {
+      expr.table = implicitTable;
+    }
+    // Recursive check for other parts like function args handled by resolveExpressionAliasesInPlace
+    // But resolveExpressionAliasesInPlace expects aliasMap mostly.
+    // We should modify aliasMap to handle empty table keys? No, better to pre-process or inject here.
+  };
+
+  // Actually, we can just intercept column_ref within resolveExpressionAliasesInPlace
+  // or explicit injection here. 
+  // Let's modify resolveExpressionAliasesInPlace to accept implicitTable context
+  // BUT modifying the signature might break other calls.
+  // Instead, let's pre-populate the aliasMap with a special key or handle it in the traversals below.
+
+  // Better approach: When we build the aliasMap, we only map aliases.
+  // Here, if we have implicitTable, we can try to resolve null tables to it.
+
+  // Let's augment resolveExpressionAliasesInPlace to handle implicit table injection
+  const resolveWithImplicit = (expr) => {
+    if (!expr) return;
+
+    // Direct column ref check
+    if (expr.type === 'column_ref' && !expr.table && implicitTable) {
+      expr.table = implicitTable;
+    }
+
+    // Use existing recursion but we need to ensure it hits our injection logic
+    // The existing resolveExpressionAliasesInPlace only resolves IF table is present and in map
+    // We need to inject table first
+
+    // Let's do a custom traversal or modify resolveExpressionAliasesInPlace?
+    // Modifying resolveExpressionAliasesInPlace is cleaner if possible, but it's used elsewhere.
+    // Let's update `resolveExpressionAliasesInPlace` to take an optional `implicitTable` arg.
+    resolveExpressionAliasesInPlace(expr, aliasMap, implicitTable);
+  };
+
   // Resolve SELECT columns
   if (ast.columns) {
     if (ast.columns !== '*') {
       for (const col of ast.columns) {
         if (col.expr) {
-          resolveExpressionAliasesInPlace(col.expr, aliasMap);
+          resolveWithImplicit(col.expr);
         }
       }
     }
@@ -168,32 +221,32 @@ export function resolveAstAliases(ast, aliasMap) {
 
       // Handle ON conditions in JOINs
       if (table.on) {
-        resolveExpressionAliasesInPlace(table.on, aliasMap);
+        resolveWithImplicit(table.on);
       }
     }
   }
 
   // Resolve WHERE clause
   if (ast.where) {
-    resolveExpressionAliasesInPlace(ast.where, aliasMap);
+    resolveWithImplicit(ast.where);
   }
 
   // Resolve GROUP BY
   if (ast.groupby) {
     for (const group of ast.groupby) {
-      resolveExpressionAliasesInPlace(group, aliasMap);
+      resolveWithImplicit(group);
     }
   }
 
   // Resolve HAVING
   if (ast.having) {
-    resolveExpressionAliasesInPlace(ast.having, aliasMap);
+    resolveWithImplicit(ast.having);
   }
 
   // Resolve ORDER BY
   if (ast.orderby) {
     for (const order of ast.orderby) {
-      resolveExpressionAliasesInPlace(order.expr, aliasMap);
+      resolveWithImplicit(order.expr);
     }
   }
 }

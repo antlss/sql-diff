@@ -111,6 +111,18 @@ export function sortWhereConditions(where) {
     return sortWhereConditionsInPlace(result);
 }
 
+/**
+ * Get sort priority for an expression type
+ * Lower number = higher priority (appears first)
+ * Priority: Column (1) < Function (2) < Value (3)
+ */
+function getSortPriority(expr) {
+    if (!expr) return 100;
+    if (expr.type === 'column_ref') return 1;
+    if (expr.type === 'function' || expr.type === 'aggr_func') return 2;
+    return 3;
+}
+
 function sortWhereConditionsInPlace(expr) {
     if (!expr) return expr;
 
@@ -143,11 +155,24 @@ function sortWhereConditionsInPlace(expr) {
         // For commutative operators like =, sort left and right
         const commutativeOps = ['=', '!=', '<>', 'AND', 'OR'];
         if (commutativeOps.includes(expr.operator.toUpperCase())) {
-            const leftKey = generateSortKey(expr.left);
-            const rightKey = generateSortKey(expr.right);
+            const priorityLeft = getSortPriority(expr.left);
+            const priorityRight = getSortPriority(expr.right);
 
-            // Keep the smaller key on the left
-            if (leftKey > rightKey && expr.operator === '=') {
+            let shouldSwap = false;
+
+            // Primary sort: Priority (Column < Function < Value)
+            if (priorityLeft > priorityRight) {
+                shouldSwap = true;
+            } else if (priorityLeft === priorityRight) {
+                // Secondary sort: Content string
+                const leftKey = generateSortKey(expr.left);
+                const rightKey = generateSortKey(expr.right);
+                if (leftKey > rightKey) {
+                    shouldSwap = true;
+                }
+            }
+
+            if (shouldSwap && expr.operator === '=') {
                 const temp = expr.left;
                 expr.left = expr.right;
                 expr.right = temp;
